@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+from datetime import datetime
+
+
+def run_command(command):
+
+    try:
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        return {
+            "returncode": result.returncode,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip()
+        }
+
+    except Exception as error:
+
+        return {
+            "returncode": -1,
+            "stdout": "",
+            "stderr": str(error)
+        }
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        description="GxWiFiAudit - auditoría defensiva Wi-Fi"
+    )
+
+    parser.add_argument(
+        "interface",
+        help="Interfaz Wi-Fi, por ejemplo wlan0"
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="reports/wifi_audit.json"
+    )
+
+    args = parser.parse_args()
+
+    if not shutil.which("iw"):
+
+        print("[!] No está instalado 'iw'.")
+        print("[+] Instala con:")
+        print("    sudo apt update")
+        print("    sudo apt install -y iw")
+        return
+
+    interface_info = run_command(
+        ["iw", "dev", args.interface, "info"]
+    )
+
+    link_info = run_command(
+        ["iw", "dev", args.interface, "link"]
+    )
+
+    interface_exists = (
+        interface_info["returncode"] == 0
+    )
+
+    connected = (
+        link_info["returncode"] == 0
+        and "Not connected" not in link_info["stdout"]
+    )
+
+    report = {
+
+        "tool": "GxWiFiAudit",
+        "version": "1.1.0",
+
+        "interface": args.interface,
+
+        "timestamp_utc":
+            datetime.utcnow().isoformat() + "Z",
+
+        "checks": {
+
+            "iw_available": True,
+
+            "interface_exists":
+                interface_exists,
+
+            "connected":
+                connected
+        },
+
+        "raw": {
+
+            "interface":
+                interface_info,
+
+            "link":
+                link_info
+        },
+
+        "recommendations": [
+
+            "Utilizar WPA3 o WPA2-AES.",
+
+            "Desactivar WPS cuando no sea necesario.",
+
+            "Utilizar una contraseña Wi-Fi única y larga.",
+
+            "Mantener actualizado el firmware del router."
+        ],
+
+        "authorized_use_only": True
+    }
+
+    os.makedirs(
+        os.path.dirname(args.output) or ".",
+        exist_ok=True
+    )
+
+    with open(args.output, "w", encoding="utf-8") as file:
+
+        json.dump(
+            report,
+            file,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    print("\n[+] GxWiFiAudit")
+    print(f"[+] Interfaz: {args.interface}")
+
+    print(
+        "[+] Existe:",
+        "SI" if interface_exists else "NO"
+    )
+
+    print(
+        "[+] Conectada:",
+        "SI" if connected else "NO"
+    )
+
+    print(f"[+] Reporte: {args.output}")
+
+
+if name == "main":
+    main()
