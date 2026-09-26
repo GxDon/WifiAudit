@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+
+
+def command(args):
+    try:
+        return subprocess.check_output(
+            args,
+            text=True,
+            stderr=subprocess.STDOUT
+        )
+    except subprocess.CalledProcessError as error:
+        return error.output.strip()
+
+
+def get_interfaces():
+    output = command(["iw", "dev"])
+
+    return re.findall(
+        r"Interface\s+([^\s]+)",
+        output
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="WifiAudit - diagnóstico Wi-Fi local"
+    )
+
+    parser.add_argument("-i", "--interface")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="wifiaudit_report.json"
+    )
+
+    args = parser.parse_args()
+
+    if not shutil.which("iw"):
+        print("[!] No está instalado iw.")
+        print("[+] Ejecuta: sudo apt install iw")
+        sys.exit(1)
+
+    available = get_interfaces()
+
+    if not available:
+        print("[!] No se detectaron interfaces Wi-Fi.")
+        sys.exit(1)
+
+    interface = args.interface or available[0]
+
+    if interface not in available:
+        print(f"[!] Interfaz no encontrada: {interface}")
+        print(f"[+] Disponibles: {', '.join(available)}")
+        sys.exit(1)
+
+    info = command([
+        "iw",
+        "dev",
+        interface,
+        "info"
+    ])
+
+    link = command([
+        "iw",
+        "dev",
+        interface,
+        "link"
+    ])
+
+    report = {
+        "tool": "WifiAudit",
+        "interface": interface,
+        "available_interfaces": available,
+        "interface_info": info,
+        "connection": link,
+    }
+
+    with open(
+        args.output,
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            report,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    print("[+] WifiAudit ejecutado correctamente")
+    print(f"[+] Interfaz: {interface}")
+    print(f"[+] Reporte: {args.output}")
+
+
+if name == "main":
+    main()
